@@ -1,7 +1,7 @@
 import os
 import sys
 import argparse
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, cast
 from notion_client import Client as NotionClient
 
 
@@ -39,11 +39,11 @@ def dump_shared(notion: NotionClient, print_names: bool) -> Tuple[int, int]:
     data_sources = 0
 
     while True:
-        resp = notion.search(
+        resp = cast(Dict[str, Any], notion.search(
             start_cursor=cursor,
             page_size=100,
             # IMPORTANT: no query => everything shared with the integration
-        )
+        ))
 
         for item in resp.get("results", []):
             obj_type = item.get("object")

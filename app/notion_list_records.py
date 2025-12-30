@@ -73,13 +73,13 @@ def find_data_source_id_by_name(notion: NotionClient, db_name: str) -> str:
     matches = []
 
     while True:
-        resp = notion.search(
+        resp = cast(Dict[str, Any], notion.search(
             query=db_name,
             start_cursor=cursor,
             page_size=50,
             filter={"property": "object", "value": "data_source"},
             sort={"direction": "descending", "timestamp": "last_edited_time"},
-        )
+        ))
 
         for item in resp.get("results", []):
             if item.get("object") != "data_source":
