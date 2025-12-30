@@ -45,24 +45,27 @@ def prompt_db_name_if_missing(db_name: Optional[str]) -> str:
         raise ValueError("Database name cannot be empty.")
     return entered
 
-
 def find_database_id_by_name(notion: NotionClient, db_name: str) -> str:
     """
-    Uses Notion's search endpoint to find a database whose title matches db_name exactly.
+    Uses Notion search to find a database whose title matches db_name exactly.
+    (Search filter no longer supports value='database', so we filter client-side.)
     """
     cursor = None
     matches = []
 
     while True:
-        resp = cast(Dict[str, Any], notion.search(
+        # NOTE: No filter here; Notion validates filter.value as page|data_source
+        resp = notion.search(
             query=db_name,
             start_cursor=cursor,
             page_size=50,
-            filter={"property": "object", "value": "database"},
-            sort={"direction": "ascending", "timestamp": "last_edited_time"},
-        ))
+            sort={"direction": "descending", "timestamp": "last_edited_time"},
+        )
 
         for item in resp.get("results", []):
+            if item.get("object") != "database":
+                continue
+
             title_parts = item.get("title", [])
             title = "".join([p.get("plain_text", "") for p in title_parts]).strip()
             if title == db_name:
@@ -78,12 +81,8 @@ def find_database_id_by_name(notion: NotionClient, db_name: str) -> str:
             f"Confirm the database is shared with your integration."
         )
 
-    if len(matches) > 1:
-        # If you have duplicates, choose the most recently edited
-        # (last in our ascending sort would be newest,
-        # but we sorted ascending; easiest: pick the one with max last_edited_time).
-        matches.sort(key=lambda d: d.get("last_edited_time", ""))
-    return matches[-1]["id"]
+    # We sorted by last_edited_time desc, so first is most recent
+    return matches[0]["id"]
 
 
 def extract_title_from_page(page: dict) -> str:
