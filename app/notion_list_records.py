@@ -8,6 +8,7 @@ import re
 import sys
 import argparse
 import httpx
+import httpx
 from typing import Any, Dict, List, Optional, cast
 from notion_client import Client as NotionClient
 
@@ -280,7 +281,7 @@ def list_visible_objects(notion: NotionClient, object_type: str) -> None:
                 print(f"{oid} | DATA_SOURCE | {title}")
             count += 1
 
-        cursor = resp.get("next_cursor")
+        cursor = cast(Optional[str], resp.get("next_cursor"))
         if not resp.get("has_more"):
             break
 
