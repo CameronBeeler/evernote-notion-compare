@@ -79,7 +79,8 @@ def find_database_id_by_name(notion: NotionClient, db_name: str) -> str:
         )
 
     if len(matches) > 1:
-        # If you have duplicates, choose the most recently edited (last in our ascending sort would be newest,
+        # If you have duplicates, choose the most recently edited
+        # (last in our ascending sort would be newest,
         # but we sorted ascending; easiest: pick the one with max last_edited_time).
         matches.sort(key=lambda d: d.get("last_edited_time", ""))
     return matches[-1]["id"]
@@ -115,7 +116,7 @@ def collect_database_row_titles(notion: NotionClient, database_id: str) -> List[
     cursor = None
 
     while True:
-        resp = cast(Dict[str, Any], notion.databases.query(
+        resp = cast(Dict[str, Any], notion.databases.query(  # type: ignore[attr-defined]
             database_id=database_id,
             start_cursor=cursor,
             page_size=100,
