@@ -6,6 +6,7 @@ and extract the titles of all records (rows) within them.
 import os
 import sys
 import argparse
+import httpx
 from typing import Any, Dict, List, Optional, cast
 
 from notion_client import Client as NotionClient
@@ -113,37 +114,58 @@ def extract_title_from_page(page: dict) -> str:
     return ""
 
 
-def collect_database_row_titles(notion: NotionClient, database_id: str) -> List[str]:
-    """Collect all row titles from a Notion database.
-
-    Queries the database in pages and extracts the title property from each row,
-    handling pagination automatically.
-
-    Args:
-        notion: The Notion API client instance.
-        database_id: The ID of the Notion database to query.
-
-    Returns:
-        A list of title strings, one for each row in the database.
+def query_data_source_pages(notion: NotionClient, data_source_id: str) -> List[Dict[str, Any]]:
     """
-    titles: List[str] = []
-    cursor = None
+    Query all pages (rows) in a Notion data source with pagination.
+    Tries SDK endpoint if present, otherwise falls back to raw HTTP.
+    """
+    results: List[Dict[str, Any]] = []
+    cursor: Optional[str] = None
+
+    # Try SDK first (newer notion-client versions may provide this)
+    data_sources_ep = getattr(notion, "data_sources", None)
 
     while True:
-        resp = cast(Dict[str, Any], notion.databases.query(  # type: ignore[attr-defined]
-            database_id=database_id,
-            start_cursor=cursor,
-            page_size=100,
-        ))
+        if data_sources_ep is not None and hasattr(data_sources_ep, "query"):
+            resp = cast(Dict[str, Any], data_sources_ep.query(  # type: ignore[attr-defined]
+                data_source_id=data_source_id,
+                start_cursor=cursor,
+                page_size=100,
+            ))
+        else:
+            # Fallback: direct REST call to Query a data source
+            token = require_env("NOTION_TOKEN")
+            notion_version = "2025-09-03"
+            url = f"https://api.notion.com/v1/data_sources/{data_source_id}/query"
 
-        for page in resp.get("results", []):
-            title = extract_title_from_page(page)
-            titles.append(title)
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Notion-Version": notion_version,
+                "Content-Type": "application/json",
+            }
+            payload: Dict[str, Any] = {"page_size": 100}
+            if cursor:
+                payload["start_cursor"] = cursor
 
-        cursor = resp.get("next_cursor")
+            with httpx.Client(timeout=30.0) as client:
+                r = client.post(url, headers=headers, json=payload)
+                r.raise_for_status()
+                resp = cast(Dict[str, Any], r.json())
+
+        results.extend(cast(List[Dict[str, Any]], resp.get("results", [])))
+
+        cursor = cast(Optional[str], resp.get("next_cursor"))
         if not resp.get("has_more"):
             break
 
+    return results
+
+
+def collect_row_titles_from_data_source(notion: NotionClient, data_source_id: str) -> List[str]:
+    pages = query_data_source_pages(notion, data_source_id)
+    titles: List[str] = []
+    for page in pages:
+        titles.append(extract_title_from_page(page))
     return titles
 
 
@@ -164,7 +186,7 @@ def main() -> None:
     db_name = prompt_db_name_if_missing(args.db_name)
 
     data_source_id = find_data_source_id_by_name(notion, db_name)
-    titles = collect_database_row_titles(notion, data_source_id)
+    titles = collect_row_titles_from_data_source(notion, data_source_id)
 
     # Always print count
     print(f"Database: {db_name}")
