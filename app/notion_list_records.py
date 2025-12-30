@@ -55,12 +55,12 @@ def find_database_id_by_name(notion: NotionClient, db_name: str) -> str:
 
     while True:
         # NOTE: No filter here; Notion validates filter.value as page|data_source
-        resp = notion.search(
+        resp = cast(Dict[str, Any], notion.search(
             query=db_name,
             start_cursor=cursor,
             page_size=50,
             sort={"direction": "descending", "timestamp": "last_edited_time"},
-        )
+        ))
 
         for item in resp.get("results", []):
             if item.get("object") != "database":
