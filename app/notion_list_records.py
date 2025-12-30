@@ -45,29 +45,45 @@ def prompt_db_name_if_missing(db_name: Optional[str]) -> str:
         raise ValueError("Database name cannot be empty.")
     return entered
 
-def find_database_id_by_name(notion: NotionClient, db_name: str) -> str:
+
+def extract_data_source_title(obj: dict) -> str:
     """
-    Uses Notion search to find a database whose title matches db_name exactly.
-    (Search filter no longer supports value='database', so we filter client-side.)
+    Robustly extract the display name for a data_source returned by search.
+    """
+    # In many responses, data_source objects still use a title-like array
+    title_parts = obj.get("title")
+    if isinstance(title_parts, list):
+        return "".join([p.get("plain_text", "") for p in title_parts]).strip()
+
+    # Some objects may use "name"
+    name = obj.get("name")
+    if isinstance(name, str):
+        return name.strip()
+
+    return ""
+
+
+def find_data_source_id_by_name(notion: NotionClient, db_name: str) -> str:
+    """
+    Find a Notion *data source* whose title matches db_name exactly.
+    Notion Search filter supports value='data_source' (NOT 'database').
     """
     cursor = None
     matches = []
 
     while True:
-        # NOTE: No filter here; Notion validates filter.value as page|data_source
-        resp = cast(Dict[str, Any], notion.search(
+        resp = notion.search(
             query=db_name,
             start_cursor=cursor,
             page_size=50,
+            filter={"property": "object", "value": "data_source"},
             sort={"direction": "descending", "timestamp": "last_edited_time"},
-        ))
+        )
 
         for item in resp.get("results", []):
-            if item.get("object") != "database":
+            if item.get("object") != "data_source":
                 continue
-
-            title_parts = item.get("title", [])
-            title = "".join([p.get("plain_text", "") for p in title_parts]).strip()
+            title = extract_data_source_title(item)
             if title == db_name:
                 matches.append(item)
 
@@ -77,11 +93,10 @@ def find_database_id_by_name(notion: NotionClient, db_name: str) -> str:
 
     if not matches:
         raise LookupError(
-            f"No Notion database found with exact name '{db_name}'. "
-            f"Confirm the database is shared with your integration."
+            f"No Notion data_source found with exact name '{db_name}'. "
+            f"Confirm the data source is shared with your integration and you're using the correct NOTION_TOKEN."
         )
 
-    # We sorted by last_edited_time desc, so first is most recent
     return matches[0]["id"]
 
 
@@ -144,12 +159,12 @@ def main() -> None:
     args = parser.parse_args()
 
     notion_token = require_env("NOTION_TOKEN")
-    notion = NotionClient(auth=notion_token)
+    notion = NotionClient(auth=notion_token, notion_version="2025-09-03")
 
     db_name = prompt_db_name_if_missing(args.db_name)
 
-    db_id = find_database_id_by_name(notion, db_name)
-    titles = collect_database_row_titles(notion, db_id)
+    data_source_id = find_data_source_id_by_name(notion, db_name)
+    titles = collect_database_row_titles(notion, data_source_id)
 
     # Always print count
     print(f"Database: {db_name}")
