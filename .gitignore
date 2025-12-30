@@ -1,0 +1,35 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+
+# =========================
+# Secrets / Credentials
+# =========================
+.secrets/
+.env
+.env.*
+*.token
+*.json
+
+# =========================
+# Tooling / IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS
+# =========================
+.DS_Store
